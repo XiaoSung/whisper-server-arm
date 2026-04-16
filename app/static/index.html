@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>會議記錄系統</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: "Noto Sans TC", sans-serif; background: #f4f6f9; color: #333; }
+    header { background: #1a1a2e; color: #fff; padding: 20px 40px; font-size: 20px; font-weight: bold; }
+    .container { max-width: 900px; margin: 40px auto; padding: 0 20px; }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 28px;
+      margin-bottom: 24px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+    .card h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; color: #1a1a2e; }
+
+    .upload-area {
+      border: 2px dashed #c0c8d8;
+      border-radius: 8px;
+      padding: 40px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+    .upload-area:hover, .upload-area.drag { border-color: #4a90e2; background: #f0f6ff; }
+    .upload-area p { color: #888; margin-top: 8px; font-size: 14px; }
+    .upload-area .icon { font-size: 40px; }
+    #file-input { display: none; }
+    #file-name { margin-top: 12px; font-size: 14px; color: #4a90e2; font-weight: 500; }
+
+    .btn {
+      display: inline-block;
+      padding: 10px 24px;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: opacity 0.2s;
+    }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary { background: #4a90e2; color: #fff; }
+    .btn-success { background: #27ae60; color: #fff; }
+    .btn-download { background: #1a1a2e; color: #fff; }
+
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      color: #555;
+      margin-top: 12px;
+    }
+    .spinner {
+      width: 18px; height: 18px;
+      border: 3px solid #e0e0e0;
+      border-top-color: #4a90e2;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      display: none;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    textarea {
+      width: 100%;
+      height: 200px;
+      border: 1px solid #dde3ec;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 14px;
+      resize: vertical;
+      font-family: inherit;
+      line-height: 1.7;
+      color: #333;
+    }
+    textarea:focus { outline: none; border-color: #4a90e2; }
+    #prompt-box { height: 320px; font-size: 13px; font-family: monospace; }
+    .label {
+      font-size: 13px;
+      color: #888;
+      margin-bottom: 6px;
+    }
+    .hint {
+      font-size: 12px;
+      color: #aaa;
+      margin-top: 6px;
+    }
+    .btn-reset { background: #f0f0f0; color: #555; }
+
+    .actions { display: flex; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <header>📋 會議記錄系統</header>
+  <div class="container">
+
+    <!-- Step 1: Upload (Optional) -->
+    <div class="card">
+      <h2>Step 1 — 上傳音檔（選填）</h2>
+      <div class="upload-area" id="upload-area">
+        <div class="icon">🎙️</div>
+        <p>點擊或拖曳音檔至此，轉錄後自動填入逐字稿</p>
+        <p>支援 mp3、mp4、m4a、wav、flac 等格式</p>
+        <input type="file" id="file-input" accept="audio/*,video/*" />
+      </div>
+      <div id="file-name"></div>
+      <div class="actions">
+        <button class="btn btn-primary" id="btn-transcribe" disabled>開始轉錄</button>
+      </div>
+      <div class="status" id="status-transcribe">
+        <div class="spinner" id="spinner-transcribe"></div>
+        <span id="msg-transcribe"></span>
+      </div>
+    </div>
+
+    <!-- Step 2: Transcript -->
+    <div class="card">
+      <h2>Step 2 — 逐字稿</h2>
+      <textarea id="transcript-box" placeholder="此區塊代表 {transcript} 欄位，可直接貼上逐字稿，或上傳音檔後自動填入..."></textarea>
+    </div>
+
+    <!-- Step 2.5: Prompt -->
+    <div class="card">
+      <h2>Step 2.5 — 整理 Prompt</h2>
+      <p class="label">可自行修改 Prompt，請保留 <code>{transcript}</code> 作為逐字稿的插入位置。</p>
+      <textarea id="prompt-box" placeholder="載入中..."></textarea>
+      <div class="actions">
+        <button class="btn btn-success" id="btn-format">整理成會議記錄</button>
+        <button class="btn btn-reset" id="btn-reset-prompt">還原預設</button>
+      </div>
+      <div class="status" id="status-format">
+        <div class="spinner" id="spinner-format"></div>
+        <span id="msg-format"></span>
+      </div>
+    </div>
+
+    <!-- Step 3: Formatted -->
+    <div class="card hidden" id="section-formatted">
+      <h2>Step 3 — 會議記錄</h2>
+      <textarea id="formatted-box" placeholder="整理結果將顯示於此..."></textarea>
+      <div class="actions">
+        <button class="btn btn-download" id="btn-download">下載會議記錄</button>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const uploadArea = document.getElementById('upload-area');
+    const fileInput = document.getElementById('file-input');
+    const fileNameEl = document.getElementById('file-name');
+    const btnTranscribe = document.getElementById('btn-transcribe');
+    const btnFormat = document.getElementById('btn-format');
+    const btnResetPrompt = document.getElementById('btn-reset-prompt');
+    const btnDownload = document.getElementById('btn-download');
+    const transcriptBox = document.getElementById('transcript-box');
+    const promptBox = document.getElementById('prompt-box');
+    const formattedBox = document.getElementById('formatted-box');
+
+    let selectedFile = null;
+    let originalFilename = '';
+    let defaultTemplate = '';
+
+    // 載入預設 prompt template
+    fetch('/prompt-template')
+      .then(r => r.json())
+      .then(d => {
+        defaultTemplate = d.template;
+        promptBox.value = defaultTemplate;
+      });
+
+    // Upload area click
+    uploadArea.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) selectFile(fileInput.files[0]);
+    });
+
+    // Drag and drop
+    uploadArea.addEventListener('dragover', e => { e.preventDefault(); uploadArea.classList.add('drag'); });
+    uploadArea.addEventListener('dragleave', () => uploadArea.classList.remove('drag'));
+    uploadArea.addEventListener('drop', e => {
+      e.preventDefault();
+      uploadArea.classList.remove('drag');
+      if (e.dataTransfer.files[0]) selectFile(e.dataTransfer.files[0]);
+    });
+
+    function selectFile(file) {
+      selectedFile = file;
+      originalFilename = file.name.replace(/\.[^.]+$/, '');
+      fileNameEl.textContent = '已選擇：' + file.name;
+      btnTranscribe.disabled = false;
+    }
+
+    function setStatus(prefix, spinning, msg) {
+      document.getElementById('spinner-' + prefix).style.display = spinning ? 'block' : 'none';
+      document.getElementById('msg-' + prefix).textContent = msg;
+    }
+
+    // Transcribe
+    btnTranscribe.addEventListener('click', async () => {
+      if (!selectedFile) return;
+      btnTranscribe.disabled = true;
+      setStatus('transcribe', true, '轉錄中，請稍候...');
+
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+
+      try {
+        const res = await fetch('/transcribe', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.status === 'success') {
+          transcriptBox.value = data.text;
+          transcriptBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          setStatus('transcribe', false, '轉錄完成！');
+        } else {
+          setStatus('transcribe', false, '錯誤：' + JSON.stringify(data));
+        }
+      } catch (e) {
+        setStatus('transcribe', false, '連線失敗：' + e.message);
+      }
+      btnTranscribe.disabled = false;
+    });
+
+    // Reset prompt
+    btnResetPrompt.addEventListener('click', () => {
+      promptBox.value = defaultTemplate;
+    });
+
+    // Format
+    btnFormat.addEventListener('click', async () => {
+      const text = transcriptBox.value.trim();
+      if (!text) return;
+      btnFormat.disabled = true;
+      setStatus('format', true, '整理中，請稍候（可能需要數分鐘）...');
+
+      const blob = new Blob([text], { type: 'text/plain' });
+      const formData = new FormData();
+      formData.append('file', blob, originalFilename + '.txt');
+      formData.append('prompt_template', promptBox.value);
+
+      try {
+        const res = await fetch('/format', { method: 'POST', body: formData });
+        const data = await res.json();
+        if (data.status === 'success') {
+          formattedBox.value = data.formatted;
+          document.getElementById('section-formatted').classList.remove('hidden');
+          setStatus('format', false, '整理完成！');
+        } else {
+          setStatus('format', false, '錯誤：' + JSON.stringify(data));
+        }
+      } catch (e) {
+        setStatus('format', false, '連線失敗：' + e.message);
+      }
+      btnFormat.disabled = false;
+    });
+
+    // Download
+    btnDownload.addEventListener('click', () => {
+      const text = formattedBox.value;
+      if (!text) return;
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = originalFilename + '_formatted.txt';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+  </script>
+</body>
+</html>
