@@ -35,7 +35,8 @@ RUN pip3 install --no-cache-dir \
     huggingface_hub \
     tokenizers \
     onnxruntime \
-    av
+    av \
+    opencc-python-reimplemented
 
 RUN pip3 install --no-cache-dir --no-deps faster-whisper
 
